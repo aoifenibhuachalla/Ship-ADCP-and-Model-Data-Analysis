@@ -1,0 +1,193 @@
+#import data
+import netCDF4 as nc
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from tqdm import tqdm
+from scipy import signal
+file_path = 'shiptrack_0_level_2.nc'
+dataset = nc.Dataset(file_path, 'r')
+
+print(dataset)
+
+print("Dimensions:")
+for dim in dataset.dimensions.values():
+    print(dim)
+print("\nVariables:")
+for var in dataset.variables.values():
+    print(var)
+
+print("\nGlobal Attributes:")
+for attr in dataset.ncattrs():
+    print(f"{attr}: {getattr(dataset, attr)}")
+
+# Access specific variables
+temperature = dataset.variables['to'][:]  # Sea water potential temperature
+salinity = dataset.variables['so'][:]     # Sea water salinity
+u_velocity = dataset.variables['u'][:]    # Zonal velocity component
+v_velocity = dataset.variables['v'][:]    # Meridional velocity component
+w_velocity = dataset.variables['w'][:]    # Vertical velocity at cells
+
+# Get coordinates
+time = dataset.variables['time'][:]
+depth = dataset.variables['depth'][:]
+lon = dataset.variables['lon'][:]
+lat = dataset.variables['lat'][:]
+
+#print(depth)
+
+
+def load_data(file_path):
+    # Open the dataset
+    dataset = Dataset(file_path, 'r')
+    
+    # Extract variables
+    u_velocity = dataset.variables['u'][:]
+    v_velocity = dataset.variables['v'][:]
+    depth = dataset.variables['depth'][:]
+    lat = dataset.variables['lat'][:]
+    lon = dataset.variables['lon'][:]
+    
+    return u_velocity, v_velocity, depth, lat, lon
+
+def welch_structure_function(data, order, segment_length, overlap):
+    step = segment_length - overlap
+    segments = []
+    window = np.hanning(segment_length)
+    for start in range(0, len(data) - segment_length + 1, step):
+        segment = data[start:start + segment_length]
+        segment *= window
+        segments.append(structure_function(segment, order))
+    segments = np.array(segments)
+    mean_segments = np.mean(segments, axis=0)
+    std_err_segments = np.std(segments, axis=0, ddof=1) / np.sqrt(len(segments))
+    ci_95_segments = std_err_segments * stats.t.ppf((1 + 0.95) / 2., len(segments) - 1)
+    return mean_segments, ci_95_segments
+
+def structure_function(data, order):
+    N = len(data)
+    structure_func = np.zeros(N // 2)
+    for lag in range(1, N // 2):
+        differences = data[lag:] - data[:-lag]
+        structure_func[lag] = np.mean(np.abs(differences) ** order)
+    return structure_func
+
+def plot_best_fit_line(x, y, color, label):
+    valid_indices = y > 0
+    log_x = np.log(x[valid_indices])
+    log_y = np.log(y[valid_indices])
+    slope, intercept = np.polyfit(log_x, log_y, 1)
+    fit_line = np.exp(intercept) * x ** slope
+    plt.loglog(x, fit_line, color, linestyle='--', label=label + f' (slope: {slope:.2f})')
+
+def confidence_interval(data_list):
+    data_array = np.array(data_list)
+    mean_data = np.mean(data_array, axis=0)
+    std_err_data = np.std(data_array, axis=0, ddof=1) / np.sqrt(data_array.shape[0])
+    ci_95_data = std_err_data * stats.t.ppf((1 + 0.95) / 2., data_array.shape[0] - 1)
+    return mean_data, ci_95_data
+
+def compute_structure_function(data, max_lag):
+    n = data.shape[0]
+    structure_function = np.zeros(max_lag)
+    for lag in range(1, max_lag):
+        diffs = np.abs(data[lag:] - data[:-lag])
+        structure_function[lag] = np.mean(diffs**2)
+    return structure_function
+
+def compute_rotational_divergent(u_sf, v_sf, dist_axis):
+    # Assume dist_axis is provided for computations
+    mid_dist_axis = 0.5 * (dist_axis[1:] + dist_axis[:-1])
+    mid_diff_du = 0.5 * ((v_sf[1:] - u_sf[1:]) + (v_sf[:-1] - u_sf[:-1]))
+
+    SF2rr__E = []
+    SF2dd__E = []
+
+    for ii in range(1, len(mid_dist_axis)):
+        rr = v_sf[ii-1] + np.nansum(1/mid_dist_axis[:ii] * mid_diff_du[:ii] * np.diff(dist_axis[:ii+1]))
+        dd = u_sf[ii-1] - np.nansum(1/mid_dist_axis[:ii] * mid_diff_du[:ii] * np.diff(dist_axis[:ii+1]))
+        
+        SF2rr__E.append(rr)
+        SF2dd__E.append(dd)
+    
+    return np.array(SF2rr__E), np.array(SF2dd__E)
+
+# File paths
+file_paths = [
+    'shiptrack_0_level_1.nc',
+    'shiptrack_1_level_1.nc',
+    'shiptrack_2_level_1.nc',
+    'shiptrack_3_level_2.nc',
+]
+
+for file_path in file_paths:
+    dataset = nc.Dataset(file_path, 'r')
+    
+    print(f"{file_path}:")
+    print("u dimensions:", dataset.variables['u'].shape)
+    print("v dimensions:", dataset.variables['v'].shape)
+    
+    u_velocity_first_3 = dataset.variables['u'][:1, :, :].flatten()
+    v_velocity_first_3 = dataset.variables['v'][:1, :, :].flatten()
+    
+    u_velocity_from_3 = dataset.variables['u'][1:, :, :].flatten()
+    v_velocity_from_3 = dataset.variables['v'][1:, :, :].flatten()
+    
+    max_lag = 300
+    dist_axis = np.arange(1, max_lag+1)  
+    
+    u_sf_first_3 = compute_structure_function(u_velocity_first_3, max_lag)
+    v_sf_first_3 = compute_structure_function(v_velocity_first_3, max_lag)
+    tot_sf_first_3 = u_sf_first_3 + v_sf_first_3
+    
+    u_sf_from_3 = compute_structure_function(u_velocity_from_3, max_lag)
+    v_sf_from_3 = compute_structure_function(v_velocity_from_3, max_lag)
+    tot_sf_from_3 = u_sf_from_3 + v_sf_from_3
+    
+    # Compute rotational and divergent components
+    rot_sf_first_3, div_sf_first_3 = compute_rotational_divergent(u_sf_first_3, v_sf_first_3, dist_axis)
+    rot_sf_from_3, div_sf_from_3 = compute_rotational_divergent(u_sf_from_3, v_sf_from_3, dist_axis)
+
+#plotting
+    plt.figure(figsize=(24, 12))
+    
+    plt.subplot(1, 2, 1)
+    plt.loglog(u_sf_first_3, color='aqua', lw = 2, label='u (Depth 0-2)')
+    plt.loglog(v_sf_first_3, color='purple', lw = 2,label='v (Depth 0-2)')
+    plt.loglog(tot_sf_first_3, color='magenta', lw = 2.5,label='Total (Depth 0-2)')
+    plt.loglog(rot_sf_first_3, color='blue',lw = 2, ls = ':', label='Rotational Component (Depth 0-2)')
+    plt.loglog(div_sf_first_3, color='green', lw = 2,ls = ':',label='Divergent Component (Depth 0-2)')
+    plt.plot(x3, y3*(10**(-2.15)),':', c='black')
+    plt.plot(x4, y4*(10**(-2.15)),'--', c='black') #0.15
+    plt.title('0-65  m', fontsize = 22)
+    plt.xlabel(r'$Distance\:\:[km]$', fontsize = 22)
+    plt.ylabel(r'$D^{\prime} 2 \:\:[\:m^{2}s^{-2}]$', fontsize = 22)
+    plt.legend()
+    plt.grid(True, which="both", ls="-", color='lightgrey')
+    plt.ylim(10**(-5), 10**(1))
+    plt.xlim(1, 300)
+    
+    plt.subplot(1, 2, 2)
+    plt.loglog(u_sf_from_3, color='aqua',lw = 2, label='u (Depth 3+)')
+    plt.loglog(v_sf_from_3, color='purple',lw = 2, label='v (Depth 3+)')
+    plt.loglog(tot_sf_from_3, color='magenta',lw = 2.5, label='Total (Depth 3+)')
+    plt.loglog(rot_sf_from_3, color='blue',lw = 2, ls = ':', label='Rotational Component (Depth 3+)')
+    plt.loglog(div_sf_from_3, color='green',lw = 2, ls = ':', label='Divergent Component (Depth 3+)')
+    plt.plot(x3, y3*(10**(-2.15)),':', c='black')
+    plt.plot(x4, y4*(10**(-2.15)),'--', c='black') #0.15
+    plt.title('65-500  m', fontsize = 22)
+    plt.xlabel(r'$Distance\:\:[km]$', fontsize = 22)
+    plt.ylabel(r'$D^{\prime} 2 \:\:[\:m^{2}s^{-2}]$', fontsize = 22)
+    plt.legend()
+    plt.grid(True, which="both", ls="--")
+    plt.ylim(10**(-5), 10**(1))
+    plt.xlim(1,300)
+
+    
+    # Save figure
+    plt.tight_layout()
+    plt.savefig(f'{file_path}_structure_function_with_components.png')
+    plt.show()
+    plt.close()
+    
+    dataset.close()
