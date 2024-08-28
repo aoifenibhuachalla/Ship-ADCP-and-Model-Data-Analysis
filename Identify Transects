@@ -5,6 +5,7 @@ from scipy.interpolate import griddata
 from scipy.io import loadmat
 from tqdm import tqdm
 
+# Load MATLAB .mat file
 mat_data = scipy.io.loadmat('m188lr75000_5bin_2.mat')
 
 print(mat_data.keys())
@@ -58,8 +59,11 @@ y =txy1_nested[2, :]
 
 #print(lat)
 
+# Define coordinate reference systems (CRS)
 input_crs = 'EPSG:32631'  
 output_crs = 'EPSG:4326'  
+
+# Create a projection object and transform the coordinates
 proj = Proj(init=input_crs)
 latitude, longitude = transform(proj, Proj(init=output_crs), x, y)
 
@@ -84,6 +88,7 @@ plt.show()
 
 from shapely.geometry import LineString, Point
 
+# Parameters for identifying straight segments in the track
 segment_threshold = 750
 angle_threshold = 5  
 straight_segments = []
@@ -97,6 +102,7 @@ last_angle = None
 def calculate_angle(p1, p2):
     return np.degrees(np.arctan2(p2[1] - p1[1], p2[0] - p1[0]))
 
+# Loop through the coordinates to identify segments
 for i in range(len(x) - 1):
     current_segment.append((x[i], y[i]))
     current_indices.append(i)
@@ -127,6 +133,7 @@ else:
     segment = LineString(current_segment)
     regular_segments.append(segment)
 
+# Plot the segments, highlighting straight segments
 plt.figure(figsize=(12, 8))
     
 for segment in regular_segments:
