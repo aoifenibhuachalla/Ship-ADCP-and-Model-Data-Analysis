@@ -1,0 +1,240 @@
+import scipy.io
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from scipy.io import loadmat
+from tqdm import tqdm
+
+mat_data = scipy.io.loadmat('m188lr75000_5bin_2.mat')
+
+print(mat_data.keys())
+b = mat_data['b'] 
+print(b.dtype)
+nav = b['nav'][0, 0]
+ref = b['ref'][0, 0]
+
+txy1 = nav['txy1']
+print(nav.dtype)
+print(txy1.shape)
+
+
+txy1_nested = txy1[0, 0]
+
+print(txy1_nested.shape)
+
+time = txy1_nested[0, :]  
+x = txy1_nested[1, :]     
+y = txy1_nested[2, :]
+
+print(ref.dtype)
+
+#VELS = ref['velocity'][0,0]
+#print(VELS.dtype)
+#print(VELS.shape)
+#
+c = mat_data['c']
+print(c.dtype)
+vel = c['vel'][0,0]
+print(vel.shape)
+
+depth = b['depth'][0,0]
+print(depth.dtype)
+#print(depth)
+
+DEPTH = np.linspace(12.5, 647.5, 128)
+#print(DEPTH)
+
+def convertTime(date):
+    return pd.to_datetime(date).value
+
+VELS = b['vel'][0,0]
+print(VELS.shape)
+
+import pyproj
+from pyproj import Proj, transform
+
+u = txy1_nested[1, :]
+v = txy1_nested[2, :]
+time = txy1_nested[0, :]
+
+import scipy.io
+import matplotlib.pyplot as plt
+import numpy as np
+pg = c['pg'][0,0]
+PG = pg[pg < 50] = np.nan
+
+#Good Vels
+good_vels = np.copy(VELS)
+mask = pg < 50
+mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
+good_vels[mask_expanded] = np.nan
+
+#best vels
+best_vels = np.copy(VELS)
+mask = pg < 75
+mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
+best_vels[mask_expanded] = np.nan
+
+start_idx = 12758
+end_idx = 13757
+
+# Extracting transect data
+u_transect = best_vels[:, 0, start_idx:end_idx]
+v_transect = best_vels[:, 1, start_idx:end_idx]
+time = txy1_nested[0, :]
+
+time_transect = time[start_idx:end_idx]
+
+
+
+
+
+
+def filter_by_depth(depth, u, v, min_depth, max_depth):
+    mask = (depth >= min_depth) & (depth < max_depth)
+    return u[mask], v[mask], depth[mask]
+
+def plot_spectrum(best_vels, depth, start_idx, end_idx, depth_ranges=[(0,65), (65, 500)], filename='spectrum.png'):
+    best_u_transect = best_vels[:, 0, start_idx:end_idx]
+    best_v_transect = best_vels[:, 1, start_idx:end_idx]
+
+    velocity_magnitude_u = np.sqrt(best_vels[:, 0, start_idx:end_idx]**2)
+    velocity_magnitude_v = np.sqrt(best_vels[:, 1, start_idx:end_idx]**2)
+    velocity_magnitude = np.sqrt(best_u_transect**2 + best_v_transect**2)
+
+    velocity_magnitude_u_filled = np.where(np.isnan(velocity_magnitude_u), np.nanmean(velocity_magnitude_u), velocity_magnitude_u)
+    velocity_magnitude_v_filled = np.where(np.isnan(velocity_magnitude_v), np.nanmean(velocity_magnitude_v), velocity_magnitude_v)
+    velocity_magnitude_filled = np.where(np.isnan(velocity_magnitude), np.nanmean(velocity_magnitude), velocity_magnitude)
+
+    bin_size = 2
+    num_bins = (end_idx - start_idx) // bin_size
+    velocity_magnitude_u_binned = np.zeros((128, num_bins))
+    velocity_magnitude_v_binned = np.zeros((128, num_bins))
+    velocity_magnitude_binned = np.zeros((128, num_bins))
+
+    for i in range(num_bins):
+        bin_start = i * bin_size
+        bin_end = bin_start + bin_size
+        velocity_magnitude_u_binned[:, i] = np.nanmean(velocity_magnitude_u_filled[:, bin_start:bin_end], axis=1)
+        velocity_magnitude_v_binned[:, i] = np.nanmean(velocity_magnitude_v_filled[:, bin_start:bin_end], axis=1)
+        velocity_magnitude_binned[:, i] = np.nanmean(velocity_magnitude_filled[:, bin_start:bin_end], axis=1)
+
+    N = velocity_magnitude_u_binned.shape[1]
+    num_segments = 5
+    segment_length = N // (num_segments - 1)
+    overlap = segment_length // 2
+    window = np.hanning(segment_length)
+
+    def compute_spectrum(velocity_binned):
+        KE_spectrum_segments = []
+        for depth in range(128):
+            segments = []
+            for start in range(0, N - segment_length + 1, overlap):
+                segment = velocity_binned[depth, start:start + segment_length]
+                if len(segment) < len(window):
+                    continue
+                segment *= window
+                fft_result = np.fft.fft(segment)
+                segments.append(np.abs(fft_result[1:segment_length // 2]) ** 2 / segment_length)
+            KE_spectrum_segments.append(segments)
+        KE_spectrum_segments = np.array(KE_spectrum_segments)
+        KE_spectrum_avg = np.mean(KE_spectrum_segments, axis=1)
+        KE_spectrum_std = np.std(KE_spectrum_segments, axis=1, ddof=1)
+        KE_spectrum_conf = 1.96 * KE_spectrum_std / np.sqrt(KE_spectrum_segments.shape[1])
+        return KE_spectrum_avg, KE_spectrum_conf
+
+    KE_spectrum_avg_u, KE_spectrum_conf_u = compute_spectrum(velocity_magnitude_u_binned)
+    KE_spectrum_avg_v, KE_spectrum_conf_v = compute_spectrum(velocity_magnitude_v_binned)
+    KE_spectrum_avg_total, KE_spectrum_conf_total = compute_spectrum(velocity_magnitude_binned)
+
+    k = np.fft.fftfreq(segment_length)
+    k = k[1:segment_length // 2]
+
+    DEPTH = np.linspace(12.5, 647.5, 128)
+
+    slope = -5 / 3
+    reference_k = np.linspace(min(k), max(k), 50)
+    reference_ke = 1.25e-4 * reference_k ** slope
+
+    slope1 = -2
+    reference_k1 = np.linspace(min(k), max(k), 50)
+    reference_ke1 = 2.5e-5 * reference_k1 ** slope1
+
+    def spec_helm_decomp(k, Cu, Cv):
+        dk = k[1] - k[0]
+        s = np.log(k)
+        Fphi = np.zeros_like(Cu)
+        Fpsi = np.zeros_like(Cu)
+        Cphi = np.zeros_like(Cu)
+        Cpsi = np.zeros_like(Cu)
+        for i in range(s.size - 1):
+            ds = np.diff(s[i:])
+            sh = np.sinh(s[i] - s[i:])
+            ch = np.cosh(s[i] - s[i:])
+            Fp = Cu[i:] * sh + Cv[i:] * ch
+            Fs = Cv[i:] * sh + Cu[i:] * ch
+            Fpsi[i] = integrate.simps(Fs, s[i:])
+            Fphi[i] = integrate.simps(Fp, s[i:])
+            Fpsi[Fpsi < 0.] = 0.
+            Fphi[Fphi < 0.] = 0.
+        Cpsi = Fpsi - Fphi + Cu
+        Cphi = Fphi - Fpsi + Cv
+        return Cpsi, Cphi
+
+    fig, axes = plt.subplots(1, 2, figsize=(24, 12))
+
+    for i, (depth_min, depth_max) in enumerate(depth_ranges):
+        depth_indices = [np.argmin(np.abs(DEPTH - depth)) for depth in np.linspace(depth_min, depth_max, 10)]
+
+        Cu_avg = np.mean(KE_spectrum_avg_u[depth_indices, :], axis=0)
+        Cv_avg = np.mean(KE_spectrum_avg_v[depth_indices, :], axis=0)
+        Ct_avg = np.mean(KE_spectrum_avg_total[depth_indices, :], axis=0)
+
+        Cu_conf = np.mean(KE_spectrum_conf_u[depth_indices, :], axis=0)
+        Cv_conf = np.mean(KE_spectrum_conf_v[depth_indices, :], axis=0)
+        Ct_conf = np.mean(KE_spectrum_conf_total[depth_indices, :], axis=0)
+
+        Cpsi, Cphi = spec_helm_decomp(k, Cu_avg, Cv_avg)
+        plt.rcParams.update({'font.size': 14, 'axes.labelsize': 16})
+        ax = axes[i]
+        ax.loglog(k, Cu_avg, linestyle='-', linewidth=2.5, color='cyan', label='Along-track (u)')
+        ax.loglog(k, Cv_avg, linestyle='-', linewidth=2.5, color='purple', label='Cross-track (v)')
+        ax.loglog(k, Ct_avg, linestyle='-', linewidth=3.5, color='magenta', label='Total')
+        ax.loglog(k, Cpsi, linestyle='-.', linewidth=2.5, color='dodgerblue', label='Rotational')
+        ax.loglog(k, Cphi, linestyle='-.', linewidth=2.5, color='green', label='Divergent')
+        ax.fill_between(k, Cu_avg - Cu_conf, Cu_avg + Cu_conf, color='cyan', alpha=0.05)
+        ax.fill_between(k, Cv_avg - Cv_conf, Cv_avg + Cv_conf, color='purple', alpha=0.05)
+        ax.fill_between(k, Ct_avg - Ct_conf, Ct_avg + Ct_conf, color='magenta', alpha=0.05)
+        ax.loglog(reference_k, reference_ke, linestyle='-.', linewidth=2.5, color='black')
+        ax.loglog(reference_k1, reference_ke1, linestyle='--', linewidth=2.5, color='black')
+        ax.set_xlabel('Horizontal Wavenumber [cpkm]')
+        ax.set_ylabel(r"KE spectral density [m$^2$ s$^{-2}$/cpkm]")
+        ax.set_title(f'Depth Range: {depth_min}-{depth_max} m')
+        ax.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+        ax.legend()
+
+        ax2 = ax.twiny()
+        ax2.set_xlim(1 / np.array(ax.get_xlim()))
+        ax2.set_xscale('log')
+        ax2.set_xlabel('Wavelength [km]')
+        tick_positions = np.logspace(np.log10(1/max(k)), np.log10(1/min(k)), num=6)
+        ax2.set_xticks(tick_positions)
+        ax2.set_xticklabels([f'{tick:.1f}' for tick in tick_positions])
+
+    for ax in axes:
+        ax.set_xlim([min(k), max(k)])
+        ax.set_ylim(10e-5, 10)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.show()
+
+## Load your data (make sure you replace this with your actual data loading code)
+#data = scipy.io.loadmat('your_data_file.mat')
+#best_vels = data['best_vels']  # Adjust according to your actual data structure
+#depth = data['depth'].flatten()  # Adjust according to your actual data structure
+
+# Generating plots with different filenames
+plot_spectrum(best_vels, depth, start_idx=12758, end_idx=13757, filename='spec_transect1.png')
+plot_spectrum(best_vels, depth, start_idx=22055, end_idx=24053, filename='spec_transect2.png')
+plot_spectrum(best_vels, depth, start_idx=2400, end_idx=3350, filename='spec_transect3.png')
+plot_spectrum(best_vels, depth, start_idx=28523, end_idx=29522, filename='spec_transect4.png')
