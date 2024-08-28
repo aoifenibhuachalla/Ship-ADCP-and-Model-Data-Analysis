@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as nc
 from scipy.fft import fft, fftfreq
+
+# Open the netCDF file for reading
 file_path = 'shiptrack_0_level_1.nc'
 dataset = nc.Dataset(file_path, 'r')
 
@@ -18,9 +20,6 @@ print("\nGlobal Attributes:")
 for attr in dataset.ncattrs():
     print(f"{attr}: {getattr(dataset, attr)}")
     
-import netCDF4 as nc
-import numpy as np
-import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from tqdm import tqdm
 from scipy import signal
@@ -54,10 +53,12 @@ colors = [
     'blue', 'green',  'orange','red','blue', 'green',  'orange','red'
 ]
 
+# Apply a Hanning window to the data to reduce spectral leakage
 def apply_hanning_window(data):
     window = np.hanning(len(data))
     return data * window
 
+# Compute the kinetic energy spectrum using FFT
 def compute_kinetic_energy_spectrum(data, sampling_interval):
     n = len(data)
     windowed_data = apply_hanning_window(data)
@@ -118,6 +119,7 @@ def add_reference_lines(ax):
     ax.loglog(x, y_2, 'k:', lw=1)
     ax.legend(loc='upper right')
 
+# Compute the Helmholtz decomposition to separate flow into divergence and rotation
 def compute_helmholtz_decomposition(u, v, dx, dy):
     divergence = np.zeros(u.shape[1:])
     rotation = np.zeros(u.shape[1:])
@@ -142,18 +144,20 @@ file_paths = [
     'shiptrack_3_level_1.nc',
 ]
 
-sampling_interval = 300
+sampling_interval = 300  # Time interval between measurements
 
 fig, axes = plt.subplots(nrows=4, ncols=2, figsize=(12, 24))
 axes = axes.flatten()
 
+# Iterate over each file to generate spectra
 for i, file_path in enumerate(file_paths):
     dataset = nc.Dataset(file_path, 'r')
     
     print(f"{file_path}:")
     print("u dimensions:", dataset.variables['u'].shape)
     print("v dimensions:", dataset.variables['v'].shape)
-    
+
+    # Separate data into upper and lower depth ranges for analysis
     u_upper = dataset.variables['u'][:2, :, :]
     v_upper = dataset.variables['v'][:2, :, :]
     
