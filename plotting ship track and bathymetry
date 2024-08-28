@@ -1,0 +1,290 @@
+#plot ship track
+import scipy.io
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from scipy.io import loadmat
+from tqdm import tqdm
+
+mat_data = scipy.io.loadmat('m188lr75000_5bin_2.mat')
+
+print(mat_data.keys())
+b = mat_data['b'] 
+print(b.dtype)
+nav = b['nav'][0, 0]
+ref = b['ref'][0, 0]
+
+txy1 = nav['txy1']
+print(nav.dtype)
+print(txy1.shape)
+
+
+txy1_nested = txy1[0, 0]
+
+print(txy1_nested.shape)
+
+time = txy1_nested[0, :]  
+x = txy1_nested[1, :]     
+y = txy1_nested[2, :]
+
+print(ref.dtype)
+
+#VELS = ref['velocity'][0,0]
+#print(VELS.dtype)
+#print(VELS.shape)
+#
+c = mat_data['c']
+print(c.dtype)
+vel = c['vel'][0,0]
+print(vel.shape)
+
+depth = b['depth'][0,0]
+print(depth.dtype)
+#print(depth)
+
+DEPTH = np.linspace(12.5, 647.5, 128)
+#print(DEPTH)
+
+def convertTime(date):
+    return pd.to_datetime(date).value
+
+VELS = b['vel'][0,0]
+print(VELS.shape)
+
+import pyproj
+from pyproj import Proj, transform
+
+x = txy1_nested[1, :]
+y =txy1_nested[2, :]
+
+#print(lat)
+
+input_crs = 'EPSG:32631'  
+output_crs = 'EPSG:4326'  
+proj = Proj(init=input_crs)
+latitude, longitude = transform(proj, Proj(init=output_crs), x, y)
+
+plt.figure(figsize=(12, 8))  
+
+plt.plot(x,y, 'w-', linewidth=1.5)
+#plt.plot(latitude,longitude, 'w-', linewidth=1.5)
+
+plt.title('Track of the RV Meteor')
+plt.xlabel('Latitude')
+plt.ylabel('Longitude')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5, color = 'dimgrey')
+#plt.xlim(0.4e6, 1.1e6)
+#plt.ylim( -4e6,-3.4e6)
+plt.xlim(3, 8)
+plt.ylim(-34, -31)
+plt.gca().set_facecolor('lightskyblue')
+plt.show()
+
+##########################################
+
+#plot regional bathymetry
+import numpy as np
+import matplotlib.pyplot as plt
+from netCDF4 import Dataset
+from pyproj import Proj, transform
+import scipy.io
+import cartopy.crs as ccrs
+import cartopy.feature
+import seaborn as sns
+import matplotlib
+import matplotlib.patches as patches
+import matplotlib
+from matplotlib.patches import FancyArrowPatch
+
+# Load bathymetry data
+bathymetry_file = 'gebco_2023_n-23.0_s-37.5_w0.0_e20.0.nc'
+bathymetry_data = Dataset(bathymetry_file)
+bathymetry_lon = bathymetry_data.variables['lon'][:]
+bathymetry_lat = bathymetry_data.variables['lat'][:]
+bathymetry_depth = bathymetry_data.variables['elevation'][:]
+
+# Load mat data
+mat_data = scipy.io.loadmat('m188lr75000_5bin_2.mat')
+b = mat_data['b']
+nav = b['nav'][0, 0]
+txy1 = nav['txy1']
+txy1_nested = txy1[0, 0]
+time = txy1_nested[0, :]
+x = txy1_nested[1, :]
+y = txy1_nested[2, :]
+
+# Coordinate transformation
+input_crs = 'EPSG:32631'
+output_crs = 'EPSG:4326'
+proj = Proj(init=input_crs)
+latitude, longitude = transform(proj, Proj(init=output_crs), x, y)
+
+# Plotting
+fig = plt.figure(figsize=(10, 10))
+ax = plt.axes(projection=ccrs.PlateCarree())
+ax.set_extent((-60, 22.5, -52, 70), crs=ccrs.PlateCarree())
+ax.add_feature(cartopy.feature.NaturalEarthFeature(category='physical', name='LAND', scale='10m'), color='black', zorder=0)
+gl = ax.gridlines(draw_labels=True)
+gl.right_labels = False
+
+vmin = -7000
+vmax = 0
+v = np.linspace(vmin, vmax, 15, endpoint=True)
+v2 = np.linspace(vmin, vmax, 15, endpoint=True)
+
+cmap = 'ocean'
+# Create a contour plot
+contplot = ax.contourf(bathymetry_lon, bathymetry_lat, bathymetry_depth, v, cmap=cmap, vmin=vmin, vmax=vmax, transform=ccrs.PlateCarree())
+
+# Create colour bar with only negative values
+cbar = plt.colorbar(contplot, ax=ax, norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), ticks=[tick for tick in v2 if tick < 0], spacing='proportional', label='Depth [m]', shrink=0.5, extend='both')
+
+# Plotting the track
+plt.plot(longitude, latitude, 'w-', linewidth=1.5)
+
+# Highlight mesoscale and submesoscale features with anti-clockwise arrows
+agulhas_rings_lon = [8, 10, 12.5, 11]  # Example longitudes of Agulhas rings
+agulhas_rings_lat = [-27, -32, -33, -29]  # Example latitudes of Agulhas rings
+agulhas_rings_radius = [.5, .6, 0.65, 0.7]  # Example radii of Agulhas rings
+style = "Simple, tail_width=3, head_width=8, head_length=10"
+kw = dict(arrowstyle=style, color="aqua")
+def add_circular_arrow(ax, lon, lat, radius, num_arcs=4):
+    for i in range(num_arcs):
+        angle_start = 2 * np.pi * i / num_arcs
+        angle_end = 2 * np.pi * (i + 1) / num_arcs
+        start_point = (lon + radius * np.cos(angle_start), lat + radius * np.sin(angle_start))
+        end_point = (lon + radius * np.cos(angle_end), lat + radius * np.sin(angle_end))
+        arc = patches.FancyArrowPatch(start_point, end_point,
+                                      connectionstyle=f"arc3,rad={radius/2}", **kw, transform=ccrs.PlateCarree())
+        ax.add_patch(arc)
+
+for lon, lat, radius in zip(agulhas_rings_lon, agulhas_rings_lat, agulhas_rings_radius):
+    add_circular_arrow(ax, lon, lat, radius)
+
+# Add arrows pointing northwest
+nw_arrows_lon = [15, 8, 7.5]  # Example longitudes for northwest arrows
+nw_arrows_lat = [-36, -34, -30]  # Example latitudes for northwest arrows
+
+for lon, lat in zip(nw_arrows_lon, nw_arrows_lat):
+    arrow = FancyArrowPatch((lon, lat), (lon - 1, lat + 1),
+                            mutation_scale=15, color='aqua', arrowstyle='simple', transform=ccrs.PlateCarree())
+    ax.add_patch(arrow)
+
+# Add labels for Namibia and South Africa
+ax.text(17, -25, 'Namibia', horizontalalignment='center', transform=ccrs.PlateCarree(), fontsize=12, color='white')
+ax.text(18.75, -30, 'South', horizontalalignment='center', transform=ccrs.PlateCarree(), fontsize=12, color='white')
+ax.text(18.75, -31, 'Africa', horizontalalignment='center', transform=ccrs.PlateCarree(), fontsize=12, color='white')
+
+# Add label for Walvis Ridge
+ax.text(1, -25, 'Walvis Ridge', horizontalalignment='left', transform=ccrs.PlateCarree(), fontsize=12, color='white')
+ax.text(7, -32.2, 'Agulhas Rings', horizontalalignment='center', transform=ccrs.PlateCarree(), fontsize=12, color='white')
+
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='dimgrey')
+plt.xlim(0, 20)
+plt.ylim(-37.5, -23.0)
+plt.savefig('closeup+++.png')
+plt.show()
+
+#########################################
+
+# Plot ship track with bathymetry and teansects highlighed and labeled
+import numpy as np
+import matplotlib.pyplot as plt
+from netCDF4 import Dataset
+from pyproj import Proj, transform
+import scipy.io
+import cartopy.crs as ccrs
+import cartopy.feature
+import seaborn as sns
+import matplotlib
+from matplotlib.patches import FancyArrowPatch
+
+# Load bathymetry data
+bathymetry_file = 'gebco_2023_n-23.0_s-37.5_w0.0_e20.0.nc'
+bathymetry_data = Dataset(bathymetry_file)
+bathymetry_lon = bathymetry_data.variables['lon'][:]
+bathymetry_lat = bathymetry_data.variables['lat'][:]
+bathymetry_depth = bathymetry_data.variables['elevation'][:]
+
+# Load mat data
+mat_data = scipy.io.loadmat('m188lr75000_5bin_2.mat')
+b = mat_data['b']
+nav = b['nav'][0, 0]
+txy1 = nav['txy1']
+txy1_nested = txy1[0, 0]
+time = txy1_nested[0, :]
+x = txy1_nested[1, :]
+y = txy1_nested[2, :]
+
+# Coordinate transformation
+input_crs = 'EPSG:32631'
+output_crs = 'EPSG:4326'
+proj = Proj(init=input_crs)
+latitude, longitude = transform(proj, Proj(init=output_crs), x, y)
+
+# Plotting
+fig = plt.figure(figsize=(10, 10))
+ax = plt.axes(projection=ccrs.PlateCarree())
+ax.set_extent((-60, 22.5, -52, 70), crs=ccrs.PlateCarree())
+ax.add_feature(cartopy.feature.NaturalEarthFeature(category='physical', name='LAND', scale='10m'), color='black', zorder=0)
+gl = ax.gridlines(draw_labels=True)
+gl.right_labels = False
+
+vmin = -7000
+vmax = 0
+v = np.linspace(vmin, vmax, 15, endpoint=True)
+v2 = np.linspace(vmin, vmax, 15, endpoint=True)
+
+cmap = 'ocean'
+# Create a contour plot
+contplot = ax.contourf(bathymetry_lon, bathymetry_lat, bathymetry_depth, v, cmap=cmap, vmin=vmin, vmax=vmax, transform=ccrs.PlateCarree())
+
+# Create colour bar with only negative values
+#cbar = plt.colorbar(contplot, ax=ax, norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), ticks=[tick for tick in v2 if tick < 0], spacing='proportional', label='Depth [m]', shrink=0.5, extend='both')
+
+# Plotting the track
+plt.plot(longitude, latitude, 'w-', linewidth=1.5)
+plt.plot(x, y, 'w-', linewidth=1.5)
+
+segments_to_highlight = [
+    (12758, 13757, 'magenta'),
+    (22055, 24053, 'cyan'),
+    (28523, 29522, 'tomato'),
+    (2400, 3350, 'yellow'),
+]
+
+# Highlighting the transects
+for start_idx, end_idx, color in segments_to_highlight:
+    plt.plot(x[start_idx:end_idx+1], y[start_idx:end_idx+1], color=color, linewidth=3, label=f'Segment {start_idx}-{end_idx}')
+
+# Add labels for the transects with corresponding colours and slight offsets
+transect_labels = ['A', 'B', 'C', 'D']
+label_offsets = [
+    (0.3, 0.3),  # offset for transect A
+    (0.3, 0.2), # offset for transect B
+    (-0.3, 0.3), # offset for transect C
+    (-0.3, -0.3) # offset for transect D
+]
+label_positions = [
+    (x[12758], y[12758]),
+    (x[22055], y[22055]),
+    (x[28523], y[28523]),
+    (x[2400], y[2400]),
+]
+
+for (start_idx, _, color), (label, (lx, ly)), (dx, dy) in zip(segments_to_highlight, zip(transect_labels, label_positions), label_offsets):
+    ax.text(lx + dx, ly + dy, label, color=color, fontsize=16, fontweight='bold', transform=ccrs.PlateCarree())
+
+# Add label for Walvis Ridge
+ax.text(1, -30, 'Walvis Ridge', horizontalalignment='left', transform=ccrs.PlateCarree(), fontsize=12, color='white')
+
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='dimgrey')
+plt.xlim(2, 9)
+plt.ylim(-35, -30)
+plt.savefig('closeup+track.png')
+plt.show()
+
