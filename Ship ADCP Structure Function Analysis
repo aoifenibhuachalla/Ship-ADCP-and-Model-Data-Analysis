@@ -61,9 +61,12 @@ time = txy1_nested[0, :]
 import scipy.io
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Clean data
 pg = c['pg'][0,0]
 PG = pg[pg < 50] = np.nan
 
+# Create masks for good and best velocities
 #Good Vels
 good_vels = np.copy(VELS)
 mask = pg < 50
@@ -94,6 +97,8 @@ def confidence_interval(data):
     ci_95_data = std_err_data * stats.t.ppf((1 + 0.95) / 2., data.shape[0] - 1)
     return mean_data, ci_95_data
 
+
+# Extract and clean velocity data
 velocity=mat_contents['b']['vel'] #u,v
 velocity=velocity[0][0]
 u=velocity[:,0,:]
@@ -133,12 +138,15 @@ np.shape(u_75)
 #this is the upper depth range
 depth[0:11] 
 
+# Process data for depth range 0-65m
 u_75_100=u_75[0:11] # 50m
 v_75_100=v_75[0:11]
 
 #u_75_100=u_75[11:99] # 50m
 #v_75_100=v_75[11:99]
 #
+
+# Calculate mean velocities
 u_75_100_=np.nanmean(u_75_100, axis=0) # 
 v_75_100_=np.nanmean(v_75_100, axis=0)
 
