@@ -1,0 +1,699 @@
+#import data
+import scipy.io
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from scipy.io import loadmat
+from tqdm import tqdm
+
+mat_data = scipy.io.loadmat('m188lr75000_5bin_2.mat')
+
+print(mat_data.keys())
+b = mat_data['b'] 
+print(b.dtype)
+nav = b['nav'][0, 0]
+ref = b['ref'][0, 0]
+
+txy1 = nav['txy1']
+print(nav.dtype)
+print(txy1.shape)
+
+
+txy1_nested = txy1[0, 0]
+
+print(txy1_nested.shape)
+
+time = txy1_nested[0, :]  
+x = txy1_nested[1, :]     
+y = txy1_nested[2, :]
+
+print(ref.dtype)
+
+#VELS = ref['velocity'][0,0]
+#print(VELS.dtype)
+#print(VELS.shape)
+#
+c = mat_data['c']
+print(c.dtype)
+vel = c['vel'][0,0]
+print(vel.shape)
+
+depth = b['depth'][0,0]
+print(depth.dtype)
+#print(depth)
+
+DEPTH = np.linspace(12.5, 647.5, 128)
+#print(DEPTH)
+
+def convertTime(date):
+    return pd.to_datetime(date).value
+
+VELS = b['vel'][0,0]
+print(VELS.shape)
+
+import pyproj
+from pyproj import Proj, transform
+
+u = txy1_nested[1, :]
+v = txy1_nested[2, :]
+time = txy1_nested[0, :]
+
+import scipy.io
+import matplotlib.pyplot as plt
+import numpy as np
+pg = c['pg'][0,0]
+PG = pg[pg < 50] = np.nan
+
+#Good Vels
+good_vels = np.copy(VELS)
+mask = pg < 50
+mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
+good_vels[mask_expanded] = np.nan
+
+#best vels
+best_vels = np.copy(VELS)
+mask = pg < 75
+mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
+best_vels[mask_expanded] = np.nan
+
+start_idx = 12758
+end_idx = 13757
+
+# Extracting transect data
+u_transect = best_vels[:, 0, start_idx:end_idx]
+v_transect = best_vels[:, 1, start_idx:end_idx]
+time = txy1_nested[0, :]
+
+time_transect = time[start_idx:end_idx]
+
+#confidence interval 
+def confidence_interval(data):
+    data = np.array(data)
+    mean_data = np.mean(data, axis=0)
+    std_err_data = np.std(data, axis=0, ddof=1) / np.sqrt(data.shape[0])
+    ci_95_data = std_err_data * stats.t.ppf((1 + 0.95) / 2., data.shape[0] - 1)
+    return mean_data, ci_95_data
+
+velocity=mat_contents['b']['vel'] #u,v
+velocity=velocity[0][0]
+u=velocity[:,0,:]
+v=velocity[:,1,:]
+navigation=mat_contents['b']['nav'] #txy # 1 min resolution 
+navigation=navigation[0][0][0][0][0]
+time=navigation[0,:]
+lon=navigation[1,:]
+lat=navigation[2,:]
+depth=mat_contents['b']['depth'] # in meters
+depth=depth[0][0][0]
+pg=mat_contents['c']['pg'] # % good
+pg=pg[0][0]
+
+pg[pg<=75]=np.nan # set lower than 75% to nan
+pg
+
+cols, rows = pg.shape
+print(cols)
+print(rows)
+
+u_75=u
+v_75=v
+
+# get u & v with pg>=50%
+for c in range(cols):
+    for r in range(rows):
+        u_75[c][r] = np.nan if np.isnan(pg[c][r]) else u_75[c][r]
+
+for c in range(cols):
+    for r in range(rows):
+        v_75[c][r] = np.nan if np.isnan(pg[c][r]) else v_75[c][r]
+
+np.shape(u_75)
+
+#define depth range to be looked at
+#this is the upper depth range
+depth[0:11] 
+
+u_75_100=u_75[0:11] # 50m
+v_75_100=v_75[0:11]
+
+#u_75_100=u_75[11:99] # 50m
+#v_75_100=v_75[11:99]
+#
+u_75_100_=np.nanmean(u_75_100, axis=0) # 
+v_75_100_=np.nanmean(v_75_100, axis=0)
+
+np.shape(u_75_100_)
+u_75_100_[0:5]
+np.shape(lat)
+
+fig, ax1 = plt.subplots(constrained_layout=True,figsize=(6,3))
+
+ax1.plot(lon,lat) # section c
+
+fig, ax1 = plt.subplots(constrained_layout=True,figsize=(6,3))
+
+ax1.plot(lon[28500:],lat[28500:]) # section c
+
+#from os.path import dirname, join as pjoin
+
+pg[pg<=75]=np.nan # set lower than 75% to nan
+
+u_75=u
+v_75=v
+cols, rows = pg.shape
+print(cols)
+print(rows)
+# get u & v with pg>=50%
+for c in range(cols):
+    for r in range(rows):
+        u_75[c][r] = np.nan if np.isnan(pg[c][r]) else u_75[c][r]
+
+for c in range(cols):
+    for r in range(rows):
+        v_75[c][r] = np.nan if np.isnan(pg[c][r]) else v_75[c][r]
+        
+        u_75_100=u_75[0:18,:] # 50m
+v_75_100=v_75[0:18,:]
+
+u_75_100_=np.nanmean(u_75_100, axis=0) # 
+v_75_100_=np.nanmean(v_75_100, axis=0)
+
+######################### BBBBBBBB #####################################
+# get section c data
+lon_c=lon[22055: 24053]
+lat_c=lat[22055: 24053]
+u_75_100_c=u_75_100_[22055: 24053]
+v_75_100_c=v_75_100_[22055: 24053]
+
+len(u_75_100_c)
+
+xx=u_75_100_c[0:1995]
+yy=v_75_100_c[0:1995]
+
+xx_=lon_c[0:1995]
+yy_=lat_c[0:1995]
+
+# here we took 3 as our input 
+n = 5
+ 
+########################## AAAAAAA #####################################
+#lon_c_filtered = lon[12758:13757]
+#lat_c_filtered = lat[12758:13757]
+#u_75_100_c=u_75_100_[12758:13757]
+#v_75_100_c=v_75_100_[12758:13757]
+#    
+#
+#len(u_75_100_c)
+#
+#xx=u_75_100_c[0:996]
+#yy=v_75_100_c[0:996]
+#
+#xx_=lon_c[0:996]
+#yy_=lat_c[0:996
+#
+## here we took 3 as our input 
+#n = 6
+########################## CCCCCCCCCCC #####################################
+## get section c data
+#lon_c=lon[2400: 3350]
+#lat_c=lat[2400: 3350]
+#u_75_100_c=u_75_100_[2400: 3350]
+#v_75_100_c=v_75_100_[2400: 3350]
+#
+#len(u_75_100_c)
+#
+#xx=u_75_100_c[0:945]
+#yy=v_75_100_c[0:945]
+#
+#xx_=lon_c[0:945]
+#yy_=lat_c[0:945]
+#
+## here we took 3 as our input 
+#n = 5
+########################## DDDDDDDDDD #####################################
+## get section c data
+#lon_c=lon[28523: 29522]
+#lat_c=lat[28523: 29522]
+#u_75_100_c=u_75_100_[28523: 29522]
+#v_75_100_c=v_75_100_[28523: 29522]
+#
+#len(u_75_100_c)
+#
+#xx=u_75_100_c[0:996]
+#yy=v_75_100_c[0:996]
+#
+#xx_=lon_c[0:996]
+#yy_=lat_c[0:996]
+#
+## here we took 3 as our input 
+#n = 5
+#####################################################################
+
+
+# calculates the mean of 5 min 
+avgResult_u = np.nanmean(xx.reshape(-1, n), axis=1) 
+avgResult_v = np.nanmean(yy.reshape(-1, n), axis=1)  
+
+avgResult_lon = np.nanmean(xx_.reshape(-1, n), axis=1) 
+avgResult_lat = np.nanmean(yy_.reshape(-1, n), axis=1)  
+#lat_c_nan=lat_c
+#lon_c_nan=lon_c
+
+lat_c_nan=avgResult_lat
+lon_c_nan=avgResult_lon
+# set in array of lat and lon values to nan, where in u and v the mean value is nan
+
+row=lat_c_nan.shape
+for r in range(row[0]):
+        lat_c_nan[r] = np.nan if np.isnan(avgResult_u[r]) else lat_c_nan[r]
+
+for r in range(row[0]):
+        lon_c_nan[r] = np.nan if np.isnan(avgResult_u[r]) else lon_c_nan[r]
+        
+        # drop coordinates & u & v, where u & v are nan
+
+u_c_ = avgResult_u[~(np.isnan(avgResult_u))]
+v_c_ = avgResult_v[~(np.isnan(avgResult_v))]
+
+lat_c_ = lat_c_nan[~(np.isnan(lat_c_nan))]
+lon_c_ = lon_c_nan[~(np.isnan(lon_c_nan))]
+
+def cosd(x):
+    return np.cos(x * np.pi / 180)
+
+
+def dist(lon1,lon2,lat1,lat2):
+    X=abs(lon1 - lon2)*cosd(0.5*(lat1+lat2))*111321
+    Y=abs(lat1- lat2) *111321
+    return np.sqrt(X**2 + Y**2)
+
+
+Distance_ = []
+du_l = []
+du_t = []
+
+for i in (range(0,len(lon_c_))):   # takes the first data point
+    lon_1=lon_c_[i]
+    lat_1=lat_c_[i]
+    u_1=u_c_[i]
+    v_1=v_c_[i]
+    for ii in (range(i+1, len(lon_c_))): # takes the second to last data point
+        lon_2= lon_c_[ii]
+        lat_2= lat_c_[ii]
+        u_2= u_c_[ii]
+        v_2= v_c_[ii]
+        # calculates distance between the two points and takes account the earth curvature 
+        X= abs(lon_1 - lon_2)*cosd(0.5*(lat_1+lat_2))*111321
+        Y= abs(lat_1- lat_2) *111321
+        dist = np.sqrt(X**2 + Y**2)
+            
+        rx = (lon_1 - lon_2)*cosd(0.5*(lat_1 + lat_2))
+        ry = (lat_1- lat_2)
+        magr = np.sqrt(rx**2 + ry**2)
+        rxx = rx/magr
+        ryy = ry/magr
+            
+        dux = u_1 - u_2
+        duy= v_1-v_2
+        dul = dux*rxx + duy*ryy
+        dut = duy*rxx - dux*ryy
+
+        dist_=dist/1000 # meters to km
+        Distance_.append(dist_)
+        du_l.append(dul)
+        du_t.append(dut)
+        
+du_t_ = np.array(du_t)
+du_l_ = np.array(du_l)
+
+    # calculate the distance of the section in meters, from the first data point
+Distance_c=[]
+
+lon_1=lon_c_[0]
+lat_1=lat_c_[0]
+for ii in (range(1, len(lon_c_))): # takes the second to last data point
+    lon_2= lon_c_[ii]
+    lat_2= lat_c_[ii]
+
+    # calculates distance between the two points and takes account the earth curvature 
+    X= abs(lon_1 - lon_2)*cosd(0.5*(lat_1+lat_2))*111321
+    Y= abs(lat_1- lat_2) *111321
+    dist = np.sqrt(X**2 + Y**2)
+    dist_=dist/1000 # meters to km
+
+    Distance_c.append(dist_)
+    
+arras=np.linspace(start = 0, stop = 300, num = 601) # make array from 0 to 300 km with 500m steps
+
+
+bin1=arras[0:-1]
+bin2=arras[1:]
+
+dist_axis = 0.5*(bin1+bin2) # axsis for binning, so that the values are between 500 m steps 
+
+
+
+# binning of the data
+binned_ = [] 
+dut_results = []
+dul_results = []
+
+for i in range(0, len(dist_axis)):   #dist_axis
+    idd=np.argwhere((Distance_>=arras[i])&(Distance_<arras[i+1]))
+    binned_.append(idd)
+    dut_results.append(du_t_[idd])  # dut
+    dul_results.append(du_l_[idd])  # dul
+            
+   
+
+dut_1 = []
+dul_1 = []
+du1_total = []
+
+dut_2 = []
+dul_2 = []
+du2_total = []
+
+    
+for ii in range(0, len(dist_axis)):
+########################################################
+# SF1
+    dut_1_=np.nanmean(dut_results[ii]**1)  #SF1_t
+    dul_1_=np.nanmean(dul_results[ii]**1)  #SF1_l
+    du1_total_=dut_1_+dul_1_  
+    
+    
+    dut_1.append(dut_1_)
+    dul_1.append(dul_1_)
+    du1_total.append(du1_total_)
+###########################################################
+# SF2
+    dut_2_=np.nanmean(dut_results[ii]**2) #SF2_t
+    dul_2_=np.nanmean(dul_results[ii]**2) #SF2_l
+    du2_total_=dut_2_+dul_2_              # SF2_total
+    
+    
+    dut_2.append(dut_2_)
+    dul_2.append(dul_2_)
+    du2_total.append(du2_total_)
+    
+# slopes
+x2=np.linspace(0.5,500,2)     # from 1 to 10, by 50
+y2 =x2**2 # slope 1
+
+x3=np.linspace(0.5,500,2)      # from 1 to 10, by 50
+y3 =x3**(2/3) # slope 1
+
+x4=np.linspace(0.5,500,2)      # from 1 to 10, by 50
+y4 =x4**(1) # slope 1
+
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.io
+
+def cosd(x):
+    return np.cos(x * np.pi / 180)
+
+def calculate_distance(lon1, lon2, lat1, lat2):
+    X = abs(lon1 - lon2) * cosd(0.5 * (lat1 + lat2)) * 111321
+    Y = abs(lat1 - lat2) * 111321
+    return np.sqrt(X**2 + Y**2)
+
+def filter_by_depth(depth, u, v, min_depth, max_depth):
+    mask = (depth >= min_depth) & (depth < max_depth)
+    return u[mask], v[mask], depth[mask]
+
+# Load data
+mat_contents = scipy.io.loadmat('m188lr75000_5bin_2.mat')
+velocity = mat_contents['b']['vel']
+velocity = velocity[0][0]
+u = velocity[:,0,:]
+v = velocity[:,1,:]
+
+navigation = mat_contents['b']['nav']
+navigation = navigation[0][0][0][0][0]
+time = navigation[0,:]
+lon = navigation[1,:]
+lat = navigation[2,:]
+
+depth = mat_contents['b']['depth']
+depth = depth[0][0][0]
+
+pg = mat_contents['c']['pg']
+pg = pg[0][0]
+pg[pg <= 75] = np.nan
+
+# Process u and v with pg >= 50%
+u_75 = np.where(pg > 50, u, np.nan)
+v_75 = np.where(pg > 50, v, np.nan)
+
+# Depth ranges to process
+depth_ranges = [(0,65), (65,500)]
+
+# Store results for each depth range
+results = {}
+
+for min_depth, max_depth in depth_ranges:
+    u_filtered, v_filtered, depth_filtered = filter_by_depth(depth, u_75, v_75, min_depth, max_depth)
+    
+    u_75_filtered = np.nanmean(u_filtered, axis=0)
+    v_75_filtered = np.nanmean(v_filtered, axis=0)
+    
+    lon_c_filtered = lon[12758:13757]
+    lat_c_filtered = lat[12758:13757]
+    u_75_100_c=u_75_100_[12758:13757]
+    v_75_100_c=v_75_100_[12758:13757]
+        
+    
+    len(u_75_100_c)
+    
+    xx=u_75_100_c[0:996]
+    yy=v_75_100_c[0:996]
+    
+    xx_=lon_c[0:996]
+    yy_=lat_c[0:996]
+    
+    n = 6
+    avgResult_u = np.nanmean(xx.reshape(-1, n), axis=1)
+    avgResult_v = np.nanmean(yy.reshape(-1, n), axis=1)
+    avgResult_lon = np.nanmean(xx_.reshape(-1, n), axis=1)
+    avgResult_lat = np.nanmean(yy_.reshape(-1, n), axis=1)
+    
+    lat_c_nan = avgResult_lat
+    lon_c_nan = avgResult_lon
+
+    for r in range(lat_c_nan.shape[0]):
+        lat_c_nan[r] = np.nan if np.isnan(avgResult_u[r]) else lat_c_nan[r]
+        lon_c_nan[r] = np.nan if np.isnan(avgResult_u[r]) else lon_c_nan[r]
+    
+    u_c_ = avgResult_u[~np.isnan(avgResult_u)]
+    v_c_ = avgResult_v[~np.isnan(avgResult_v)]
+    lat_c_ = lat_c_nan[~np.isnan(lat_c_nan)]
+    lon_c_ = lon_c_nan[~np.isnan(lon_c_nan)]
+
+    Distance_ = []
+    du_l = []
+    du_t = []
+
+    for i in range(len(lon_c_)):
+        lon_1 = lon_c_[i]
+        lat_1 = lat_c_[i]
+        u_1 = u_c_[i]
+        v_1 = v_c_[i]
+        for ii in range(i + 1, len(lon_c_)):
+            lon_2 = lon_c_[ii]
+            lat_2 = lat_c_[ii]
+            u_2 = u_c_[ii]
+            v_2 = v_c_[ii]
+            distance = calculate_distance(lon_1, lon_2, lat_1, lat_2) / 1000
+            rx = (lon_1 - lon_2) * cosd(0.5 * (lat_1 + lat_2))
+            ry = (lat_1 - lat_2)
+            magr = np.sqrt(rx**2 + ry**2)
+            rxx = rx / magr
+            ryy = ry / magr
+            dux = u_1 - u_2
+            duy = v_1 - v_2
+            dul = dux * rxx + duy * ryy
+            dut = duy * rxx - dux * ryy
+            Distance_.append(distance)
+            du_l.append(dul)
+            du_t.append(dut)
+
+    du_t_ = np.array(du_t)
+    du_l_ = np.array(du_l)
+    Distance_c = []
+    lon_1 = lon_c_[0]
+    lat_1 = lat_c_[0]
+    for ii in range(1, len(lon_c_)):
+        lon_2 = lon_c_[ii]
+        lat_2 = lat_c_[ii]
+        distance = calculate_distance(lon_1, lon_2, lat_1, lat_2) / 1000
+        Distance_c.append(distance)
+
+    arras = np.linspace(start=0, stop=300, num=601)
+    bin1 = arras[0:-1]
+    bin2 = arras[1:]
+    dist_axis = 0.5 * (bin1 + bin2)
+    
+    binned_ = []
+    dut_results = []
+    dul_results = []
+    
+    for i in range(len(dist_axis)):
+        idd = np.argwhere((Distance_ >= arras[i]) & (Distance_ < arras[i + 1])).flatten()
+        binned_.append(idd)
+        dut_results.append(du_t_[idd])
+        dul_results.append(du_l_[idd])
+
+    dut_1 = []
+    dul_1 = []
+    du1_total = []
+    
+    dut_2 = []
+    dul_2 = []
+    du2_total = []
+    
+    for ii in range(len(dist_axis)):
+        dut_1_ = np.nanmean(dut_results[ii]**1)
+        dul_1_ = np.nanmean(dul_results[ii]**1)
+        du1_total_ = dut_1_ + dul_1_
+        dut_1.append(dut_1_)
+        dul_1.append(dul_1_)
+        du1_total.append(du1_total_)
+        
+        dut_2_ = np.nanmean(dut_results[ii]**2)
+        dul_2_ = np.nanmean(dul_results[ii]**2)
+        du2_total_ = dut_2_ + dul_2_
+        dut_2.append(dut_2_)
+        dul_2.append(dul_2_)
+        du2_total.append(du2_total_)
+
+    results[(min_depth, max_depth)] = {
+        'du2_total': np.array(du2_total),
+        'dist_axis': dist_axis
+    }
+
+# Plot results
+fig, axs = plt.subplots(1, len(depth_ranges), figsize=(18, 6), constrained_layout=True)
+
+for ax, (depth_range, data) in zip(axs, results.items()):
+    ax.loglog(data['dist_axis'], data['du2_total'], label=f'Depth {depth_range[0]}-{depth_range[1]} m', linewidth=2)
+    ax.set_xlabel(r'$Distance\:\:[km]$')
+    ax.set_ylabel(r'$D^{\prime} 2 \:\:[\:m^{2}s^{-2}]$')
+    ax.set_title(f'Depth Range {depth_range[0]}-{depth_range[1]} m')
+    ax.grid(True, which='both', linestyle='-', linewidth=0.5)
+    ax.legend()
+
+plt.show()
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Your existing data and variables
+mid_dist_axis = 0.5 * (bin1 + bin2)
+SF2ll = np.array(dul_2)
+SF2tt = np.array(dut_2)
+
+mid_diff_du = 0.5 * ((SF2tt[0:-1] - SF2ll[0:-1]) + (SF2tt[1:] - SF2ll[1:]))
+
+SF2rr_E = []
+SF2dd_E = []
+
+for ii in range(1, 601):
+    rr = SF2tt[ii-1] + np.nansum(1/mid_dist_axis[0:ii-1] * mid_diff_du[0:ii-1] * np.diff(dist_axis[0:ii]))
+    dd = SF2ll[ii-1] - np.nansum(1/mid_dist_axis[0:ii-1] * mid_diff_du[0:ii-1] * np.diff(dist_axis[0:ii]))
+
+    SF2rr_E.append(rr)
+    SF2dd_E.append(dd)
+
+SF2rr_E = np.array(SF2rr_E)
+SF2dd_E = np.array(SF2dd_E)
+
+# Plotting the results
+plt.figure(figsize=(12, 6))
+
+plt.loglog(SF2rr_E, label='Rotational Component (SF2rr_E)')
+plt.loglog(SF2dd_E, label='Divergent Component (SF2dd_E)', linestyle='--')
+
+plt.xlabel('Index')
+plt.ylabel('Value')
+plt.title('Rotational and Divergent Components')
+plt.legend()
+plt.grid(True)
+
+plt.show()
+
+
+def filter_by_depth(depth, u, v, min_depth, max_depth):
+    mask = (depth >= min_depth) & (depth < max_depth)
+    return u[mask], v[mask], depth[mask]
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+def smooth_data(data, window_size):
+    """Apply a moving average smoothing to the data."""
+    return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
+
+# Your existing data and variables
+mid_dist_axis = 0.5 * (bin1 + bin2)
+SF2ll = np.array(dul_2)
+SF2tt = np.array(dut_2)
+
+mid_diff_du = 0.5 * ((SF2tt[0:-1] - SF2ll[0:-1]) + (SF2tt[1:] - SF2ll[1:]))
+
+SF2rr_E = []
+SF2dd_E = []
+
+for ii in range(1, 601):
+    rr = SF2tt[ii-1] + np.nansum(1/mid_dist_axis[0:ii-1] * mid_diff_du[0:ii-1] * np.diff(dist_axis[0:ii]))
+    dd = SF2ll[ii-1] - np.nansum(1/mid_dist_axis[0:ii-1] * mid_diff_du[0:ii-1] * np.diff(dist_axis[0:ii]))
+
+    SF2rr_E.append(rr)
+    SF2dd_E.append(dd)
+
+SF2rr_E = np.array(SF2rr_E)
+SF2dd_E = np.array(SF2dd_E)
+
+# Calculate total component
+SF2total = SF2ll + SF2tt
+
+# Apply smoothing function
+window_size = 5  # Adjust the window size as needed
+SF2ll_smoothed = smooth_data(SF2ll, window_size)
+SF2tt_smoothed = smooth_data(SF2tt, window_size)
+SF2total_smoothed = smooth_data(SF2total, window_size)
+SF2rr_E_smoothed = smooth_data(SF2rr_E, window_size)
+SF2dd_E_smoothed = smooth_data(SF2dd_E, window_size)
+
+# Create an index array for the smoothed data
+index_smoothed = np.arange(window_size-1, len(SF2ll))
+
+# Create a range for the reference lines
+reference_range = np.logspace(np.log10(1), np.log10(len(SF2ll)), num=len(SF2ll))
+
+# Calculate scale factor for reference lines
+scale_factor = np.max(SF2total_smoothed) / 100
+
+# Plotting all components with smoothing
+plt.figure(figsize=(12, 8))
+
+plt.loglog(index_smoothed, SF2ll_smoothed, label='Smoothed Longitudinal Component (SF2ll)', color='aqua')
+plt.loglog(index_smoothed, SF2tt_smoothed, label='Smoothed Transverse Component (SF2tt)', color='purple')
+plt.loglog(index_smoothed, SF2total_smoothed, label='Smoothed Total Component', color='magenta')
+plt.loglog(index_smoothed, SF2rr_E_smoothed, label='Smoothed Rotational Component (SF2rr_E)', linestyle='-.', color='blue')
+plt.loglog(index_smoothed, SF2dd_E_smoothed, label='Smoothed Divergent Component (SF2dd_E)', linestyle='-.', color='green')
+
+# Add reference lines
+plt.loglog(reference_range, (reference_range ** (2/3)) * scale_factor, 'k--')
+plt.loglog(reference_range, (reference_range ** (1)) * scale_factor, 'k-.')
+plt.loglog(reference_range, (reference_range ** (2)) * scale_factor, 'k:')
+
+plt.xlabel('Index')
+plt.ylabel('Value')
+plt.title('Smoothed Components Plot with Reference Lines')
+plt.legend()
+plt.grid(True, which="both", ls="--")
+
+plt.show()
