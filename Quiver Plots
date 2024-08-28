@@ -1,0 +1,136 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.io
+
+def plot_adcp_quiver(ax, mat_file, start_idx, end_idx, depth_start_idx, depth_end_idx, cmap='coolwarm', bin_size=10):
+    # Load the .mat file
+    mat_data = scipy.io.loadmat(mat_file)
+
+    # Extract the required data from the .mat file
+    b = mat_data['b']
+    nav = b['nav'][0, 0]
+    ref = b['ref'][0, 0]
+
+    txy1 = nav['txy1'][0, 0]
+
+    time = txy1[0, :]  # Time
+    x = txy1[1, :]     # x-coordinates
+    y = txy1[2, :]     # y-coordinates
+
+    # Extract velocity data
+    c = mat_data['c']
+    vel = c['vel'][0, 0]
+
+    depth = b['depth'][0, 0]
+
+    # Process VELS
+    VELS = b['vel'][0, 0]
+
+    # Extract pg
+    pg = c['pg'][0, 0]
+    pg[pg < 50] = np.nan
+
+    # Good Vels
+    good_vels = np.copy(VELS)
+    mask = pg < 50
+    mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
+    good_vels[mask_expanded] = np.nan
+
+    # Best Vels
+    best_vels = np.copy(VELS)
+    mask = pg < 75
+    mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
+    best_vels[mask_expanded] = np.nan
+
+    # Average the velocity data over the depth range
+    u_transect = np.nanmean(best_vels[depth_start_idx:depth_end_idx, 0, start_idx:end_idx], axis=0)
+    v_transect = np.nanmean(best_vels[depth_start_idx:depth_end_idx, 1, start_idx:end_idx], axis=0)
+    x_transect = x[start_idx:end_idx]
+    y_transect = y[start_idx:end_idx]
+
+    num_bins = (end_idx - start_idx) // bin_size
+
+    u_binned = np.zeros(num_bins)
+    v_binned = np.zeros(num_bins)
+    x_binned = np.zeros(num_bins)
+    y_binned = np.zeros(num_bins)
+
+    for i in range(num_bins):
+        bin_start = i * bin_size
+        bin_end = bin_start + bin_size
+        u_binned[i] = np.nanmean(u_transect[bin_start:bin_end])
+        v_binned[i] = np.nanmean(v_transect[bin_start:bin_end])
+        x_binned[i] = np.nanmean(x_transect[bin_start:bin_end])
+        y_binned[i] = np.nanmean(y_transect[bin_start:bin_end])
+
+    # Calculate the magnitude of the velocity vectors
+    magnitude = np.sqrt(u_binned**2 + v_binned**2)
+
+    norm = plt.Normalize(magnitude.min(), magnitude.max())
+    colours = plt.cm.get_cmap(cmap)(norm(magnitude))
+
+    # Create quiver plot with colour
+    q = ax.quiver(x_binned, y_binned, u_binned, v_binned, color=colours, scale=1, scale_units='xy', angles='xy')
+
+    return magnitude
+
+def plot_ship_track_with_quivers_for_depth_ranges(mat_file, segments, depth_ranges, bin_size=10, save_file=None):
+    # Load the .mat file
+    mat_data = scipy.io.loadmat(mat_file)
+
+    # Extract the required data from the .mat file
+    b = mat_data['b']
+    nav = b['nav'][0, 0]
+
+    txy1 = nav['txy1'][0, 0]
+    x = txy1[1, :]     
+    y = txy1[2, :]     
+
+    fig, axes = plt.subplots(len(depth_ranges), 1, figsize=(12, 24))
+    axes = axes.flatten()
+
+    magnitudes = []  
+
+    for ax, (depth_start, depth_end) in zip(axes, depth_ranges):
+        depth_start_idx = np.argmin(np.abs(b['depth'][0, 0] - depth_start))
+        depth_end_idx = np.argmin(np.abs(b['depth'][0, 0] - depth_end))
+
+        # Plot the whole ship track
+        ax.plot(x, y, 'k-', linewidth=0.5, label='Ship Track')
+        
+        # Plot quiver plots for each segment
+        for (start_idx, end_idx, cmap) in segments:
+            magnitude = plot_adcp_quiver(ax, mat_file, start_idx, end_idx, depth_start_idx, depth_end_idx, cmap, bin_size)
+            magnitudes.extend(magnitude)
+
+        ax.set_xlim(2, 9)
+        ax.set_ylim(-35, -30)
+        ax.set_xlabel('Latitude')
+        ax.set_ylabel('Longitude')
+        ax.set_title(f'Ship Track with ADCP Data from {depth_start} m to {depth_end} m')
+        ax.set_facecolor('lightskyblue')
+        ax.grid(True)
+        ax.legend()
+
+    # Add colour bar
+    sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(min(magnitudes), max(magnitudes)))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes, orientation='vertical', fraction=0.05, pad=0.04)
+    cbar.set_label('Velocity Magnitude (m/s)')
+
+    # Save the plot 
+    if save_file:
+        plt.savefig(save_file, bbox_inches='tight')
+    
+    plt.show()
+
+# Usage:
+segments_to_highlight = [
+    (12758, 13757, 'coolwarm'),
+    (22055, 24053, 'coolwarm'),
+    (28523, 29522, 'coolwarm'),
+    (2400, 3350, 'coolwarm'),
+]
+
+depth_ranges_to_plot = [(0, 65), (65, 500)]  # Depth ranges in meters
+plot_ship_track_with_quivers_for_depth_ranges('m188lr75000_5bin_2.mat', segments_to_highlight, depth_ranges_to_plot, bin_size=25, save_file='ship_track_with_quivers_depth_ranges.png')
