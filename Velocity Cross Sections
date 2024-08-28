@@ -1,0 +1,69 @@
+import cartopy
+pg = c['pg'][0,0]
+PG = pg[pg < 50] = np.nan
+
+#Good Vels
+good_vels = np.copy(VELS)
+mask = pg < 50
+mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
+good_vels[mask_expanded] = np.nan
+
+#best vels
+best_vels = np.copy(VELS)
+mask = pg < 75
+mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
+best_vels[mask_expanded] = np.nan
+
+start_idx = 12758
+end_idx = 13757
+
+#u_transect = good_vels[:, 0, start_idx:end_idx]
+#v_transect = good_vels[:, 1, start_idx:end_idx]
+
+u_transect = best_vels[:, 0, start_idx:end_idx]
+v_transect = best_vels[:, 1, start_idx:end_idx]
+
+bin_size = 15  
+num_bins = (end_idx - start_idx) // bin_size
+
+y = np.arange(start_idx, end_idx, bin_size)
+DEPTH = np.linspace(12.5, 647.5, 128)
+
+u_binned = np.zeros((128, num_bins))
+v_binned = np.zeros((128, num_bins))
+
+for i in range(num_bins):
+    bin_start = i * bin_size
+    bin_end = bin_start + bin_size
+    u_binned[:, i] = np.nanmean(u_transect[:, bin_start:bin_end], axis=1)
+    v_binned[:, i] = np.nanmean(v_transect[:, bin_start:bin_end], axis=1)
+
+y_binned = np.linspace(start_idx, end_idx, num_bins)
+# Plot the u profile
+plt.figure(figsize=(14, 8))
+plt.pcolormesh(y_binned, DEPTH, u_binned, cmap='coolwarm_r', shading='auto', vmin=-0.5, vmax=0.5)
+plt.colorbar(label='u (m/s)')
+#plt.xlim(25500, 26375)
+plt.ylim(20,600)
+plt.xlabel('x')
+plt.ylabel('Depth (m)')
+plt.title('Along Track Velocity Profile')
+plt.gca().invert_yaxis()
+plt.grid(True)
+plt.savefig('along_track_A.png')
+
+plt.show()
+
+plt.figure(figsize=(14, 8))
+plt.pcolormesh(y_binned, DEPTH, v_binned, cmap='coolwarm_r', shading='auto', vmin=-0.5, vmax=0.5)
+plt.colorbar(label='v (m/s)')
+plt.xlabel('x')
+#plt.xlim(25500, 26375)
+plt.ylim(20,600)
+plt.ylabel('Depth (m)')
+plt.title('Cross Track Velocity Profile')
+plt.gca().invert_yaxis()
+plt.grid(True)
+plt.savefig('transect_A_cs.png')
+
+plt.show()
