@@ -5,8 +5,10 @@ from scipy.interpolate import griddata
 from scipy.io import loadmat
 from tqdm import tqdm
 
+# Load .mat file data
 mat_data = scipy.io.loadmat('m188lr75000_5bin_2.mat')
 
+# Print the keys of the loaded .mat data to understand its structure
 print(mat_data.keys())
 b = mat_data['b'] 
 print(b.dtype)
@@ -75,6 +77,7 @@ mask = pg < 75
 mask_expanded = np.expand_dims(mask, axis=1).repeat(2, axis=1)
 best_vels[mask_expanded] = np.nan
 
+# Define indices for extracting a transect of data
 start_idx = 12758
 end_idx = 13757
 
@@ -119,6 +122,7 @@ def plot_spectrum(best_vels, depth, start_idx, end_idx, depth_ranges=[(0,65), (6
         velocity_magnitude_v_binned[:, i] = np.nanmean(velocity_magnitude_v_filled[:, bin_start:bin_end], axis=1)
         velocity_magnitude_binned[:, i] = np.nanmean(velocity_magnitude_filled[:, bin_start:bin_end], axis=1)
 
+    # Define parameters for spectral analysis
     N = velocity_magnitude_u_binned.shape[1]
     num_segments = 5
     segment_length = N // (num_segments - 1)
@@ -143,10 +147,12 @@ def plot_spectrum(best_vels, depth, start_idx, end_idx, depth_ranges=[(0,65), (6
         KE_spectrum_conf = 1.96 * KE_spectrum_std / np.sqrt(KE_spectrum_segments.shape[1])
         return KE_spectrum_avg, KE_spectrum_conf
 
+    # Compute spectra for along-track, cross-track, and total velocity components
     KE_spectrum_avg_u, KE_spectrum_conf_u = compute_spectrum(velocity_magnitude_u_binned)
     KE_spectrum_avg_v, KE_spectrum_conf_v = compute_spectrum(velocity_magnitude_v_binned)
     KE_spectrum_avg_total, KE_spectrum_conf_total = compute_spectrum(velocity_magnitude_binned)
 
+    # Define wavenumber vector
     k = np.fft.fftfreq(segment_length)
     k = k[1:segment_length // 2]
 
@@ -160,6 +166,7 @@ def plot_spectrum(best_vels, depth, start_idx, end_idx, depth_ranges=[(0,65), (6
     reference_k1 = np.linspace(min(k), max(k), 50)
     reference_ke1 = 2.5e-5 * reference_k1 ** slope1
 
+    # Helmholtz decomposition to separate rotational and divergent components of the spectrum
     def spec_helm_decomp(k, Cu, Cv):
         dk = k[1] - k[0]
         s = np.log(k)
@@ -228,10 +235,6 @@ def plot_spectrum(best_vels, depth, start_idx, end_idx, depth_ranges=[(0,65), (6
     plt.savefig(filename)
     plt.show()
 
-## Load your data (make sure you replace this with your actual data loading code)
-#data = scipy.io.loadmat('your_data_file.mat')
-#best_vels = data['best_vels']  # Adjust according to your actual data structure
-#depth = data['depth'].flatten()  # Adjust according to your actual data structure
 
 # Generating plots with different filenames
 plot_spectrum(best_vels, depth, start_idx=12758, end_idx=13757, filename='spec_transect1.png')
