@@ -1,0 +1,176 @@
+import scipy.io
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from scipy.io import loadmat
+from tqdm import tqdm
+
+mat_data = scipy.io.loadmat('m188lr75000_5bin_2.mat')
+
+print(mat_data.keys())
+b = mat_data['b'] 
+print(b.dtype)
+nav = b['nav'][0, 0]
+ref = b['ref'][0, 0]
+
+txy1 = nav['txy1']
+print(nav.dtype)
+print(txy1.shape)
+
+
+txy1_nested = txy1[0, 0]
+
+print(txy1_nested.shape)
+
+time = txy1_nested[0, :]  
+x = txy1_nested[1, :]     
+y = txy1_nested[2, :]
+
+print(ref.dtype)
+
+#VELS = ref['velocity'][0,0]
+#print(VELS.dtype)
+#print(VELS.shape)
+#
+c = mat_data['c']
+print(c.dtype)
+vel = c['vel'][0,0]
+print(vel.shape)
+
+depth = b['depth'][0,0]
+print(depth.dtype)
+#print(depth)
+
+DEPTH = np.linspace(12.5, 647.5, 128)
+#print(DEPTH)
+
+def convertTime(date):
+    return pd.to_datetime(date).value
+
+VELS = b['vel'][0,0]
+print(VELS.shape)
+
+import pyproj
+from pyproj import Proj, transform
+
+x = txy1_nested[1, :]
+y =txy1_nested[2, :]
+
+#print(lat)
+
+input_crs = 'EPSG:32631'  
+output_crs = 'EPSG:4326'  
+proj = Proj(init=input_crs)
+latitude, longitude = transform(proj, Proj(init=output_crs), x, y)
+
+print(latitude)
+print(longitude)
+
+plt.figure(figsize=(12, 8))  
+
+plt.plot(x,y, 'w-', linewidth=1.5)
+#plt.plot(latitude,longitude, 'w-', linewidth=1.5)
+
+plt.title('Track of the RV Meteor')
+plt.xlabel('Latitude')
+plt.ylabel('Longitude')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5, color = 'dimgrey')
+#plt.xlim(0.4e6, 1.1e6)
+#plt.ylim( -4e6,-3.4e6)
+plt.xlim(3, 8)
+plt.ylim(-34, -31)
+plt.gca().set_facecolor('lightskyblue')
+plt.show()
+
+from shapely.geometry import LineString, Point
+
+segment_threshold = 750
+angle_threshold = 5  
+straight_segments = []
+regular_segments = []
+segment_indices = []
+
+current_segment = []
+current_indices = []
+last_angle = None
+
+def calculate_angle(p1, p2):
+    return np.degrees(np.arctan2(p2[1] - p1[1], p2[0] - p1[0]))
+
+for i in range(len(x) - 1):
+    current_segment.append((x[i], y[i]))
+    current_indices.append(i)
+    
+    if len(current_segment) > 1:
+        angle = calculate_angle(current_segment[-2], current_segment[-1])
+        
+        if last_angle is not None:
+            angle_change = abs(angle - last_angle)
+            if angle_change > angle_threshold or len(current_segment) >= segment_threshold:
+                if len(current_segment) >= segment_threshold:
+                    segment = LineString(current_segment)
+                    straight_segments.append(segment)
+                    segment_indices.append((current_indices[0], current_indices[-1]))
+                else:
+                    segment = LineString(current_segment)
+                    regular_segments.append(segment)
+                current_segment = [current_segment[-1]]
+                current_indices = [current_indices[-1]]
+        
+        last_angle = angle
+
+if len(current_segment) >= segment_threshold:
+    segment = LineString(current_segment)
+    straight_segments.append(segment)
+    segment_indices.append((current_indices[0], current_indices[-1]))
+else:
+    segment = LineString(current_segment)
+    regular_segments.append(segment)
+
+plt.figure(figsize=(12, 8))
+    
+for segment in regular_segments:
+    x_coords, y_coords = segment.xy
+    plt.plot(x_coords, y_coords, 'w-', linewidth=1.5)
+
+for segment in straight_segments:
+    x_coords, y_coords = segment.xy
+    plt.plot(x_coords, y_coords, 'r-', linewidth=2)
+
+plt.title('Track of the RV Meteor (Highlighting Straight Segments in Red)')
+plt.xlabel('Latitude')
+plt.ylabel('Longitude')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='dimgrey')
+#plt.xlim(0.4e6, 1.1e6)
+plt.xlim(3, 8)
+plt.ylim(-34, -31)
+#plt.ylim(-4e6, -3.4e6)
+plt.gca().set_facecolor('lightskyblue')
+plt.show()
+
+for start_idx, end_idx in segment_indices:
+    print(f'Segment from index {start_idx} to {end_idx}')
+
+#plot ang highlight transects
+segments_to_highlight = [
+    (12758, 13757, 'magenta'),
+    (22055, 24053, 'cyan'),
+    (28523, 29522, 'tomato'),
+    (2400, 3350, 'dodgerblue'),
+]
+
+plt.figure(figsize=(12, 8))
+plt.plot(x,y, color='white', linewidth=1.5, label='Ship Track')  
+
+for start_idx, end_idx, color in segments_to_highlight:
+    plt.plot(x[start_idx:end_idx+1], y[start_idx:end_idx+1], color=color, linewidth=3, label=f'Segment {start_idx}-{end_idx}')
+
+plt.legend(loc='upper left')
+plt.title('Track of the RV Meteor with Highlighted Segments')
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='dimgrey')
+plt.gca().set_facecolor('lightskyblue')
+plt.xlim(3, 8)
+plt.ylim(-34, -31)
+plt.show()
