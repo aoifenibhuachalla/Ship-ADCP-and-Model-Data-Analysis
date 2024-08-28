@@ -1,0 +1,212 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import netCDF4 as nc
+from scipy.fft import fft, fftfreq
+file_path = 'shiptrack_0_level_1.nc'
+dataset = nc.Dataset(file_path, 'r')
+
+print(dataset)
+
+print("Dimensions:")
+for dim in dataset.dimensions.values():
+    print(dim)
+print("\nVariables:")
+for var in dataset.variables.values():
+    print(var)
+
+print("\nGlobal Attributes:")
+for attr in dataset.ncattrs():
+    print(f"{attr}: {getattr(dataset, attr)}")
+    
+import netCDF4 as nc
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from tqdm import tqdm
+from scipy import signal
+
+# Access specific variables
+temperature = dataset.variables['to'][:]  # Sea water potential temperature
+salinity = dataset.variables['so'][:]     # Sea water salinity
+u_velocity = dataset.variables['u'][:]    # Zonal velocity component
+v_velocity = dataset.variables['v'][:]    # Meridional velocity component
+w_velocity = dataset.variables['w'][:]    # Vertical velocity at cells
+
+# Get coordinates
+time = dataset.variables['time'][:]
+depth = dataset.variables['depth'][:]
+lon = dataset.variables['lon'][:]
+lat = dataset.variables['lat'][:]
+
+# To process multiple files with different colors
+file_paths = [
+    'shiptrack_0_level_1.nc',
+    'shiptrack_1_level_1.nc',
+    'shiptrack_2_level_1.nc',
+    'shiptrack_3_level_1.nc',
+    'shiptrack_0_level_2.nc',
+    'shiptrack_1_level_2.nc',
+    'shiptrack_2_level_2.nc',
+    'shiptrack_3_level_2.nc',
+]
+
+colors = [
+    'blue', 'green',  'orange','red','blue', 'green',  'orange','red'
+]
+
+def apply_hanning_window(data):
+    window = np.hanning(len(data))
+    return data * window
+
+def compute_kinetic_energy_spectrum(data, sampling_interval):
+    n = len(data)
+    windowed_data = apply_hanning_window(data)
+    fft_data = fft(windowed_data)
+    frequencies = fftfreq(n, d=sampling_interval)
+    spectrum = (np.abs(fft_data) ** 2) / n
+    return frequencies[:n // 2], spectrum[:n // 2]
+
+def frequency_to_wavenumber(frequencies, sampling_interval):
+    return np.fft.fftfreq(len(frequencies) * 2, d=sampling_interval)[:len(frequencies)]
+
+def bin_data(wavenumbers, spectrum, bin_size):
+    num_bins = len(wavenumbers) // bin_size
+    binned_wavenumbers = []
+    binned_spectrum = []
+    spectrum_std = []
+    
+    for i in range(num_bins):
+        start_idx = i * bin_size
+        end_idx = (i + 1) * bin_size
+        bin_wavenumbers = 100 * wavenumbers[start_idx:end_idx]
+        bin_spectrum = spectrum[start_idx:end_idx]
+        binned_wavenumbers.append(np.mean(bin_wavenumbers))
+        binned_spectrum.append(np.mean(bin_spectrum))
+        spectrum_std.append(np.std(bin_spectrum))
+    
+    return np.array(binned_wavenumbers), np.array(binned_spectrum), np.array(spectrum_std)
+
+def plot_spectra(ax, binned_wavenumbers, binned_spectrum, spectrum_std, label, color, ls='-'):
+    ax.loglog(binned_wavenumbers, binned_spectrum, lw=2, color=color, label=label, ls=ls)
+    ax.fill_between(binned_wavenumbers, 
+                    binned_spectrum - 0.1 * spectrum_std, 
+                    binned_spectrum + 0.1 * spectrum_std, 
+                    color=color, alpha=0.075)
+    ax.set_xlabel(r'$Horizontal Wavenumber\:\:[cp/km]$', fontsize=12)
+    ax.set_ylabel(r'$KE Spectral\ Density\:\:[m^2 s^{-2} cp^{-1} km]$', fontsize=12)
+    ax.grid(True, which="both", ls="--", color='lightgrey')
+    ax.legend(loc='upper right')
+    ax.set_ylim(10e-7, 10)
+    ax.set_xlim(0.005, 0.15)
+    
+    # Create a twin axis for wavelength
+    ax2 = ax.twiny()
+    ax2.set_xlim(1 / np.array(ax.get_xlim()))
+    ax2.set_xscale('log')
+    ax2.set_xlabel('Wavelength [km]')
+    
+    # Set only two ticks
+    wavelength_ticks = [10, 100]
+    ax2.set_xticks(wavelength_ticks)
+    ax2.set_xticklabels([f'{tick:.1f}' for tick in wavelength_ticks])
+
+def add_reference_lines(ax):
+    x = np.logspace(np.log10(0.005), np.log10(0.15), 100)
+    y_53 = x**(-5/3) * 1.25e-6 
+    y_2 = x**(-2) * 2.5e-7 
+    ax.loglog(x, y_53, 'k--', lw=1)
+    ax.loglog(x, y_2, 'k:', lw=1)
+    ax.legend(loc='upper right')
+
+def compute_helmholtz_decomposition(u, v, dx, dy):
+    divergence = np.zeros(u.shape[1:])
+    rotation = np.zeros(u.shape[1:])
+    
+    for i in range(u.shape[0]):
+        u_slice = u[i, :, :]
+        v_slice = v[i, :, :]
+        div = np.gradient(u_slice, axis=1) / dx + np.gradient(v_slice, axis=0) / dy
+        rot = np.gradient(v_slice, axis=1) / dx - np.gradient(u_slice, axis=0) / dy
+        divergence += div
+        rotation += rot
+    
+    divergence /= u.shape[0]
+    rotation /= u.shape[0]
+    
+    return divergence, rotation
+
+file_paths = [
+    'shiptrack_0_level_1.nc',
+    'shiptrack_1_level_1.nc',
+    'shiptrack_2_level_1.nc',
+    'shiptrack_3_level_1.nc',
+]
+
+sampling_interval = 300
+
+fig, axes = plt.subplots(nrows=4, ncols=2, figsize=(12, 24))
+axes = axes.flatten()
+
+for i, file_path in enumerate(file_paths):
+    dataset = nc.Dataset(file_path, 'r')
+    
+    print(f"{file_path}:")
+    print("u dimensions:", dataset.variables['u'].shape)
+    print("v dimensions:", dataset.variables['v'].shape)
+    
+    u_upper = dataset.variables['u'][:2, :, :]
+    v_upper = dataset.variables['v'][:2, :, :]
+    
+    u_lower = dataset.variables['u'][2:, :, :]
+    v_lower = dataset.variables['v'][2:, :, :]
+    
+    divergence_upper, rotation_upper = compute_helmholtz_decomposition(u_upper, v_upper, 1, 1)
+    divergence_lower, rotation_lower = compute_helmholtz_decomposition(u_lower, v_lower, 1, 1)
+    
+    freq_u_upper, spectrum_u_upper = compute_kinetic_energy_spectrum(u_upper.flatten(), sampling_interval)
+    freq_v_upper, spectrum_v_upper = compute_kinetic_energy_spectrum(v_upper.flatten(), sampling_interval)
+    freq_div_upper, spectrum_div_upper = compute_kinetic_energy_spectrum(divergence_upper.flatten(), sampling_interval)
+    freq_rot_upper, spectrum_rot_upper = compute_kinetic_energy_spectrum(rotation_upper.flatten(), sampling_interval)
+    
+    freq_u_lower, spectrum_u_lower = compute_kinetic_energy_spectrum(u_lower.flatten(), sampling_interval)
+    freq_v_lower, spectrum_v_lower = compute_kinetic_energy_spectrum(v_lower.flatten(), sampling_interval)
+    freq_div_lower, spectrum_div_lower = compute_kinetic_energy_spectrum(divergence_lower.flatten(), sampling_interval)
+    freq_rot_lower, spectrum_rot_lower = compute_kinetic_energy_spectrum(rotation_lower.flatten(), sampling_interval)
+    
+    # Use the reference wavenumber range from the upper depth
+    wavenumber_range_upper = frequency_to_wavenumber(freq_u_upper, sampling_interval)
+    
+    bin_size = 300
+    binned_wavenumber_u_upper, binned_spectrum_u_upper, binned_spectrum_std_u_upper = bin_data(wavenumber_range_upper, spectrum_u_upper, bin_size)
+    binned_wavenumber_v_upper, binned_spectrum_v_upper, binned_spectrum_std_v_upper = bin_data(wavenumber_range_upper, spectrum_v_upper, bin_size)
+    binned_wavenumber_total_upper, binned_spectrum_total_upper, binned_spectrum_std_total_upper = bin_data(wavenumber_range_upper, spectrum_u_upper + spectrum_v_upper, bin_size)
+    binned_wavenumber_div_upper, binned_spectrum_div_upper, binned_spectrum_std_div_upper = bin_data(wavenumber_range_upper, spectrum_div_upper, bin_size)
+    binned_wavenumber_rot_upper, binned_spectrum_rot_upper, binned_spectrum_std_rot_upper = bin_data(wavenumber_range_upper, spectrum_rot_upper, bin_size)
+    
+    binned_wavenumber_u_lower, binned_spectrum_u_lower, binned_spectrum_std_u_lower = bin_data(wavenumber_range_upper, spectrum_u_lower, bin_size)
+    binned_wavenumber_v_lower, binned_spectrum_v_lower, binned_spectrum_std_v_lower = bin_data(wavenumber_range_upper, spectrum_v_lower, bin_size)
+    binned_wavenumber_total_lower, binned_spectrum_total_lower, binned_spectrum_std_total_lower = bin_data(wavenumber_range_upper, spectrum_u_lower + spectrum_v_lower, bin_size)
+    binned_wavenumber_div_lower, binned_spectrum_div_lower, binned_spectrum_std_div_lower = bin_data(wavenumber_range_upper, spectrum_div_lower, bin_size)
+    binned_wavenumber_rot_lower, binned_spectrum_rot_lower, binned_spectrum_std_rot_lower = bin_data(wavenumber_range_upper, spectrum_rot_lower, bin_size)
+    
+    plot_spectra(axes[i * 2], binned_wavenumber_u_upper, binned_spectrum_u_upper, binned_spectrum_std_u_upper, 'Along-Track (u)', 'aqua', ls='-')
+    plot_spectra(axes[i * 2], binned_wavenumber_v_upper, binned_spectrum_v_upper, binned_spectrum_std_v_upper, 'Across-Track (v)', 'purple', ls='-')
+    plot_spectra(axes[i * 2], binned_wavenumber_div_upper, binned_spectrum_div_upper, binned_spectrum_std_div_upper, 'Divergence', 'blue', ls='-.')
+    plot_spectra(axes[i * 2], binned_wavenumber_rot_upper, binned_spectrum_rot_upper, binned_spectrum_std_rot_upper, 'Rotation', 'green', ls='-.')
+    plot_spectra(axes[i * 2], binned_wavenumber_total_upper, binned_spectrum_total_upper, binned_spectrum_std_total_upper, 'Total (u + v)', 'magenta', ls='-')
+    axes[i * 2].set_title(f'Depth Range: 0-65 m', fontsize=10)
+    add_reference_lines(axes[i * 2])
+    
+    plot_spectra(axes[i * 2 + 1], binned_wavenumber_u_lower, binned_spectrum_u_lower, binned_spectrum_std_u_lower, 'Along-Track (u)', 'aqua', ls='-')
+    plot_spectra(axes[i * 2 + 1], binned_wavenumber_v_lower, binned_spectrum_v_lower, binned_spectrum_std_v_lower, 'Across-Track (v)', 'purple', ls='-')
+    plot_spectra(axes[i * 2 + 1], binned_wavenumber_div_lower, binned_spectrum_div_lower, binned_spectrum_std_div_lower, 'Divergence', 'blue', ls='-.')
+    plot_spectra(axes[i * 2 + 1], binned_wavenumber_rot_lower, binned_spectrum_rot_lower, binned_spectrum_std_rot_lower, 'Rotation', 'green', ls='-.')
+    plot_spectra(axes[i * 2 + 1], binned_wavenumber_total_lower, binned_spectrum_total_lower, binned_spectrum_std_total_lower, 'Total (u + v)', 'magenta', ls='-')
+    axes[i * 2 + 1].set_title(f'Depth Range: 65-500 m', fontsize=10)
+    add_reference_lines(axes[i * 2 + 1])
+    
+    dataset.close()
+
+plt.tight_layout()
+plt.savefig('twin_aaall_tracks_spectral_density.png')
+plt.show()
